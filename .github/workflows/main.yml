@@ -8,9 +8,13 @@ on:
       - '**.zip'
       - '.github/workflows/main.yml'
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Descargar archivos
         uses: actions/checkout@v4
@@ -21,29 +25,40 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Instalar Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Extraer proyecto
         run: |
           sudo apt-get update
           sudo apt-get install -y unzip
           mkdir -p proyecto
-          ZIP_FILE=$(find . -type f -iname '*.zip' -not -path './.git/*' | head -n 1)
+          ZIP_FILE=$(find . -maxdepth 1 -iname '*.zip' | head -n 1)
           if [ -z "$ZIP_FILE" ]; then
-            echo "No se encontró el ZIP."
+            echo "No se encontró el ZIP original."
             exit 1
           fi
           unzip -o -q "$ZIP_FILE" -d proyecto
-
-      - name: Instalar Gradle
-        uses: gradle/actions/setup-gradle@v4
 
       - name: Compilar APK
         run: |
           cd proyecto/NENE-Android-Proyecto
           gradle assembleDebug
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          if [ ! -f "$APK" ]; then
+            echo "No se encontró el APK."
+            exit 1
+          fi
+          SIZE=$(stat -c%s "$APK")
+          echo "Tamaño del APK: $SIZE bytes"
+          if [ "$SIZE" -lt 100000 ]; then
+            echo "El APK es demasiado pequeño."
+            exit 1
+          fi
 
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
           name: NENE-APK
-          path: proyecto/**/build/outputs/apk/debug/*.apk
+          path: proyecto/NENE-Android-Proyecto/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
