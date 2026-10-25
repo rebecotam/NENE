@@ -5,14 +5,14 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'NENE Android Proyecto.zip'
+      - '**.zip'
       - '.github/workflows/main.yml'
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Descargar proyecto
+      - name: Descargar archivos
         uses: actions/checkout@v4
 
       - name: Preparar Java
@@ -25,14 +25,22 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y unzip
-          mkdir proyecto
-          unzip -q "NENE Android Proyecto.zip" -d proyecto
+          mkdir -p proyecto
+          ZIP_FILE=$(find . -type f -iname '*.zip' -not -path './.git/*' | head -n 1)
+          if [ -z "$ZIP_FILE" ]; then
+            echo "No se encontró ningún ZIP."
+            find . -maxdepth 4 -type f
+            exit 1
+          fi
+          echo "ZIP encontrado: $ZIP_FILE"
+          unzip -o -q "$ZIP_FILE" -d proyecto
 
       - name: Compilar APK
         run: |
           GRADLEW=$(find proyecto -type f -name gradlew | head -n 1)
           if [ -z "$GRADLEW" ]; then
-            echo "No se encontró gradlew en el ZIP"
+            echo "No se encontró gradlew dentro del ZIP."
+            find proyecto -maxdepth 5 -type f | head -n 200
             exit 1
           fi
           cd "$(dirname "$GRADLEW")"
@@ -40,6 +48,7 @@ jobs:
           ./gradlew assembleDebug
 
       - name: Guardar APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: NENE-APK
