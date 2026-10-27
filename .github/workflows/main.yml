@@ -1,7 +1,12 @@
+
 name: Generar APK de NENE
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '**.zip'
+      - '.github/workflows/main.yml'
 
 permissions:
   contents: read
@@ -9,6 +14,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Descargar archivos
         uses: actions/checkout@v4
@@ -19,32 +25,35 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Preparar Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Instalar herramientas
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip wget
+          wget -q https://services.gradle.org/distributions/gradle-8.9-bin.zip -O /tmp/gradle.zip
+          sudo unzip -q /tmp/gradle.zip -d /opt
+          echo "/opt/gradle-8.9/bin" >> "$GITHUB_PATH"
 
       - name: Extraer proyecto
         run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip
           mkdir -p proyecto
-          ZIP_FILE=$(find . -maxdepth 1 -type f -iname '*.zip' | head -n 1)
+          ZIP_FILE=$(find . -maxdepth 1 -iname '*.zip' | head -n 1)
           if [ -z "$ZIP_FILE" ]; then
-            echo "No se encontro el ZIP del proyecto."
+            echo "No se encontró el archivo ZIP."
             exit 1
           fi
           unzip -o -q "$ZIP_FILE" -d proyecto
-          PROJECT_DIR=$(find proyecto -type f -name settings.gradle -print -quit | xargs -r dirname)
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "No se encontro settings.gradle."
+          SETTINGS=$(find proyecto -name settings.gradle -o -name settings.gradle.kts | head -n 1)
+          if [ -z "$SETTINGS" ]; then
+            echo "No se encontró settings.gradle."
             exit 1
           fi
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
 
       - name: Compilar APK
         run: |
           cd "$PROJECT_DIR"
           gradle assembleDebug
-          APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
+          APK="app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           ls -lh "$APK"
 
@@ -52,5 +61,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: NENE-APK
-          path: "${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk"
+          path: proyecto/**/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
