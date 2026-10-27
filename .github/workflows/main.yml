@@ -1,56 +1,60 @@
 name: Generar APK de NENE
 
 on:
-workflow_dispatch:
+  workflow_dispatch:
 
 permissions:
-contents: read
+  contents: read
 
 jobs:
-build:
-runs-on: ubuntu-latest
-steps:
-- name: Checkout repository
-uses: actions/checkout@v4
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar archivos
+        uses: actions/checkout@v4
 
-  - name: Set up Java
-    uses: actions/setup-java@v5
-    with:
-      distribution: temurin
-      java-version: '17'
+      - name: Preparar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-  - name: Set up Gradle
-    uses: gradle/actions/setup-gradle@v4
+      - name: Preparar Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-  - name: Extract project
-    run: |
-      sudo apt-get update
-      sudo apt-get install -y unzip
-      mkdir -p proyecto
-      ZIP_FILE=$(find . -maxdepth 1 -type f -iname '*.zip' | head -n 1)
-      if [ -z "$ZIP_FILE" ]; then
-        echo "Project ZIP not found."
-        exit 1
-      fi
-      unzip -o -q "$ZIP_FILE" -d proyecto
-      PROJECT_DIR=$(find proyecto -type f -name settings.gradle -print -quit | xargs -r dirname)
-      if [ -z "$PROJECT_DIR" ]; then
-        echo "settings.gradle not found in the ZIP."
-        exit 1
-      fi
-      echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+      - name: Extraer proyecto
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip
+          mkdir -p proyecto
+          ZIP_FILE=$(find . -maxdepth 1 -type f -iname '*.zip' | head -n 1)
+          if [ -z "$ZIP_FILE" ]; then
+            echo "No se encontró el ZIP del proyecto."
+            exit 1
+          fi
+          unzip -o -q "$ZIP_FILE" -d proyecto
+          PROJECT_DIR=$(find proyecto -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit | xargs -r dirname)
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "No se encontró el proyecto Gradle."
+            find proyecto -maxdepth 4 -type f
+            exit 1
+          fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-  - name: Build APK
-    run: |
-      cd "$PROJECT_DIR"
-      gradle assembleDebug
-      APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
-      test -s "$APK"
-      ls -lh "$APK"
+      - name: Compilar APK
+        run: |
+          cd "$PROJECT_DIR"
+          gradle assembleDebug
+          APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
+          if [ ! -s "$APK" ]; then
+            echo "No se encontró una APK válida."
+            exit 1
+          fi
+          ls -lh "$APK"
 
-  - name: Upload APK
-    uses: actions/upload-artifact@v4
-    with:
-      name: NENE-APK
-      path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
-      if-no-files-found: error
+      - name: Guardar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NENE-APK
+          path: "${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk"
+          if-no-files-found: error
