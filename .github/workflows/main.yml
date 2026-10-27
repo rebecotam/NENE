@@ -1,58 +1,65 @@
 name: Generar APK de NENE
 
 on:
-  workflow_dispatch:
-  push:
-    paths:
-      - '**.zip'
-      - '.github/workflows/main.yml'
+workflow_dispatch:
+push:
+paths:
+- '**.zip'
+- '.github/workflows/main.yml'
 
 permissions:
-  contents: read
+contents: read
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+build:
+runs-on: ubuntu-latest
 
-    steps:
-      - name: Descargar archivos
-        uses: actions/checkout@v4
+steps:
+  - name: Descargar archivos
+    uses: actions/checkout@v4
 
-      - name: Preparar Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
+  - name: Preparar Java
+    uses: actions/setup-java@v5
+    with:
+      distribution: temurin
+      java-version: '17'
 
-      - name: Instalar Gradle
-        uses: gradle/actions/setup-gradle@v4
+  - name: Instalar Gradle
+    uses: gradle/actions/setup-gradle@v4
 
-      - name: Extraer proyecto
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip
-          mkdir -p proyecto
-          ZIP_FILE=$(find . -maxdepth 1 -iname '*.zip' | head -n 1)
-          if [ -z "$ZIP_FILE" ]; then
-            echo "No se encontró el ZIP original."
-            exit 1
-          fi
-          unzip -o -q "$ZIP_FILE" -d proyecto
+  - name: Extraer proyecto
+    run: |
+      sudo apt-get update
+      sudo apt-get install -y unzip
+      mkdir -p proyecto
+      ZIP_FILE=$(find . -maxdepth 1 -iname '*.zip' | head -n 1)
+      if [ -z "$ZIP_FILE" ]; then
+        echo "No se encontró el ZIP original."
+        exit 1
+      fi
+      unzip -o -q "$ZIP_FILE" -d proyecto
+      PROJECT_DIR=$(find proyecto -type f -name settings.gradle -o -name settings.gradle.kts | head -n 1 | xargs -r dirname)
+      if [ -z "$PROJECT_DIR" ]; then
+        echo "No se encontró el proyecto Gradle dentro del ZIP."
+        find proyecto -maxdepth 4 -type f
+        exit 1
+      fi
+      echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Compilar APK
-        run: |
-          cd proyecto/NENE-Android-Proyecto
-          gradle assembleDebug
-          APK="app/build/outputs/apk/debug/app-debug.apk"
-          if [ ! -f "$APK" ]; then
-            echo "No se encontró el APK."
-            exit 1
-          fi
-          ls -lh "$APK"
+  - name: Compilar APK
+    run: |
+      cd "$PROJECT_DIR"
+      gradle assembleDebug
+      APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
+      if [ ! -s "$APK" ]; then
+        echo "No se encontró una APK válida."
+        exit 1
+      fi
+      ls -lh "$APK"
 
-      - name: Guardar APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: NENE-APK
-          path: proyecto/NENE-Android-Proyecto/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+  - name: Guardar APK
+    uses: actions/upload-artifact@v4
+    with:
+      name: NENE-APK
+      path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+      if-no-files-found: error
